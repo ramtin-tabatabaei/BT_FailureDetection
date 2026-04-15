@@ -1,0 +1,16 @@
+{
+  "PickObject": {
+    "scene": {
+      "description": "Scene-specific configuration for the PickObject task.",
+      "default_target_region": "workspace",
+      "candidate_regions": ["table_left", "table_center", "table_right", "bin_front"]
+    },
+    "diagnosis_prompts": {
+      "grasp_pose_invalid": {
+        "prompt": "[Diagnosis] Grasp pose is invalid. Which failure best describes the issue?",
+        "input_prompt": "  Choose failure by number or name: ",
+        "failure_options": ["wrong_position", "wrong_orientation"]
+      }
+    }
+  }
+}

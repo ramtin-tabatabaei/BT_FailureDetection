@@ -1,0 +1,96 @@
+{
+  "PickObject": {
+    "default_retry_budget": 2,
+    "failures": {
+      "object_not_found": {
+        "retry_budget": 2,
+        "recoveries": [
+          "search_workspace",
+          "rescan_scene",
+          "verify_scene_setup_with_operator"
+        ]
+      },
+      "wrong_object_selection": {
+        "retry_budget": 2,
+        "recoveries": [
+          "candidate_elimination_and_reselection",
+          "ask_user"
+        ]
+      },
+      "wrong_position": {
+        "retry_budget": 2,
+        "recoveries": [
+          "reestimate_object_pose",
+          "regrasp",
+          "ask_user"
+        ]
+      },
+      "wrong_orientation": {
+        "retry_budget": 2,
+        "recoveries": [
+          "reestimate_object_pose",
+          "regrasp",
+          "ask_user"
+        ]
+      },
+      "execution_mismatch": {
+        "retry_budget": 2,
+        "recoveries": [
+          "replace_with_valid_action",
+          "reorder_actions",
+          "insert_missing_step_into_plan",
+          "re_evaluate_current_state",
+          "regenerate_local_plan_segment"
+        ]
+      },
+      "freezing": {
+        "retry_budget": 2,
+        "recoveries": [
+          "cancel_current_action",
+          "reset_controller_or_motion_planner",
+          "return_to_last_safe_state",
+          "ask_user"
+        ]
+      },
+      "grip_loss": {
+        "retry_budget": 2,
+        "recoveries": [
+          "stop_motion_immediately",
+          "search_for_dropped_object",
+          "re_approach_and_regrasp",
+          "return_to_pre_transport_state",
+          "ask_user"
+        ]
+      },
+      "collision": {
+        "retry_budget": 1,
+        "recoveries": [
+          "stop_immediately",
+          "retract_to_safe_pose",
+          "replan_motion_path",
+          "reduce_speed_or_widen_clearance",
+          "reverify_scene_before_retry"
+        ]
+      },
+      "force_limit_exceeded": {
+        "retry_budget": 1,
+        "recoveries": [
+          "stop_motion",
+          "retract_to_safe_pose",
+          "reduce_commanded_force_or_stiffness",
+          "realign_end_effector",
+          "check_if_object_shifted"
+        ]
+      },
+      "action_timeout": {
+        "retry_budget": 2,
+        "recoveries": [
+          "abort_current_action",
+          "retreat_to_previous_stable_state",
+          "diagnose_timeout_cause",
+          "retry_with_adjusted_parameters"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python -c ':*)",
+      "Bash(python3 -m pip install py_trees -q)",
+      "Bash(python3 -c \"import py_trees; print\\('py_trees OK:', py_trees.__version__\\)\")",
+      "Bash(python3 -c \"import py_trees; print\\(dir\\(py_trees\\)\\)\")"
+    ]
+  }
+}
