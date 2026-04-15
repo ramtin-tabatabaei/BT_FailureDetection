@@ -150,8 +150,9 @@ def build_pickobject():
 
 
 def build_placeobject():
-    from placeobject_bt_json_integrated import make_place_object_tree
-    return make_place_object_tree()
+    from placeobject.controller import create_scripted_place_controller
+    ctrl = create_scripted_place_controller()
+    return ctrl.root
 
 
 # ── Legend ────────────────────────────────────────────────────────────────────

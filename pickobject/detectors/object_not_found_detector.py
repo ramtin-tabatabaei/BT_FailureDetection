@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from .base import FailureAgent, FailureSignal
+from .base import FailureDetector, FailureSignal
 
 
-class GripLossAgent(FailureAgent):
-    failure_type = "grip_loss"
+class ObjectNotFoundDetector(FailureDetector):
+    """Relays an object_not_found signal set by ScenePerceptionAgent (VLM)."""
+
+    failure_type = "object_not_found"
 
     def evaluate(self, state: Dict[str, Any]) -> Optional[FailureSignal]:
         if not self._is_triggered(state):

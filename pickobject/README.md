@@ -25,7 +25,7 @@ Each action can have:
 - `postconditions`
 - `runtime failure hotkeys` during timed actions
 
-At the moment, `hold_conditions` are not used in the action code.
+`hold_conditions` exist for scripted/MCP mode, but manual mode does not ask hold-phase questions while an action is running.
 
 If a condition fails, the BT maps that failed check to a failure type such as:
 
@@ -68,6 +68,7 @@ Manual mode behavior:
 - `postconditions`: ask the human `y/n`
 - timed actions: show hotkeys for runtime failures
 - repeated identical `pre` and `post` checks in the same tick are reused
+- `hold_conditions` are skipped in manual mode
 
 Useful environment variables:
 
@@ -353,8 +354,9 @@ The project currently treats hold monitoring through runtime hotkeys or scripted
 
 In the current action files:
 
-- `hold_conditions` are empty
-- manual mode does not use hold questions
+- `hold_conditions` can be defined in the action code
+- manual mode skips hold questions during motion
+- scripted/MCP mode can still evaluate hold conditions
 
 If you want to reintroduce `hold_conditions` later for scripted/MCP mode, you can, but keep the interaction model clear:
 

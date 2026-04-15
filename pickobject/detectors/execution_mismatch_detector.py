@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from .base import FailureAgent, FailureSignal
+from .base import FailureDetector, FailureSignal
 
 
-class ObjectNotFoundAgent(FailureAgent):
-    failure_type = "object_not_found"
+class ExecutionMismatchDetector(FailureDetector):
+    """Relays an execution_mismatch signal set by ExecutionVerificationAgent (cheap → VLM)."""
+
+    failure_type = "execution_mismatch"
 
     def evaluate(self, state: Dict[str, Any]) -> Optional[FailureSignal]:
         if not self._is_triggered(state):

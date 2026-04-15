@@ -18,7 +18,13 @@ class MoveToPreGrasp(TimedInterruptibleAction):
             failure_type="execution_mismatch",
         ),
     )
-    hold_conditions = ()
+    hold_conditions = (
+        failure_check(
+            condition_id="GripperReadyBeforeGrasp",
+            question="While moving to pre-grasp, is the gripper still open and ready?",
+            failure_type="execution_mismatch",
+        ),
+    )
     postconditions = (
         failure_check(
             condition_id="GripperReadyBeforeGrasp",

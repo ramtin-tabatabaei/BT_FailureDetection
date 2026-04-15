@@ -13,7 +13,13 @@ class LiftObject(TimedInterruptibleAction):
             failure_type="grip_loss",
         ),
     )
-    hold_conditions = ()
+    hold_conditions = (
+        failure_check(
+            condition_id="ObjectInGripper",
+            question="While lifting, is the object still held in the gripper?",
+            failure_type="grip_loss",
+        ),
+    )
     postconditions = (
         failure_check(
             condition_id="FinalObjectInGripperCheck",

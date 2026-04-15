@@ -9,7 +9,7 @@ import py_trees
 
 from .config import DEFAULT_RETRY_BUDGET, FAILURE_CONFIG, MAX_TICKS, RECOVERY_CONFIG, TICK_PERIOD_SECONDS
 from .failures import RUNTIME_FAILURE_TYPES
-from .failure_manager import FailureAgentManager
+from .failure_manager import FailureDetectorManager
 from .providers import (
     ChoiceProvider,
     ConditionProvider,
@@ -51,7 +51,7 @@ def build_initial_world_state() -> Dict[str, Any]:
 class PickObjectController:
     condition_provider: ConditionProvider
     choice_provider: ChoiceProvider
-    failure_manager: FailureAgentManager = field(default_factory=FailureAgentManager)
+    failure_manager: FailureDetectorManager = field(default_factory=FailureDetectorManager)
     action_monitor: Any = field(default_factory=NullActionMonitor)
     state: Dict[str, Any] = field(default_factory=build_initial_world_state)
     root: Optional[py_trees.behaviour.Behaviour] = field(init=False, default=None)

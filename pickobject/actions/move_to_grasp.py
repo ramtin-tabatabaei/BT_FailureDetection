@@ -18,7 +18,13 @@ class MoveToGrasp(TimedInterruptibleAction):
             failure_type="execution_mismatch",
         ),
     )
-    hold_conditions = ()
+    hold_conditions = (
+        failure_check(
+            condition_id="GripperReadyBeforeGrasp",
+            question="While moving to grasp, is the gripper still open and ready?",
+            failure_type="execution_mismatch",
+        ),
+    )
     postconditions = ()
 
     def __init__(self, name: str, controller):
