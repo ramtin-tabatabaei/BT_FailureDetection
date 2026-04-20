@@ -9,6 +9,7 @@ try:
 except ImportError:  # pragma: no cover
     FastMCP = None
 
+from .agents import find_agents_for_condition, find_agents_for_failure, get_agent_specs
 from .config import CONFIG_PATH, SCENE_CONFIG_PATH
 from .controller import create_interactive_controller, create_scripted_controller
 
@@ -23,6 +24,38 @@ def build_mcp_server() -> Any:
     @mcp.tool()
     def describe_tree() -> str:
         return controller.describe_tree()
+
+    @mcp.tool()
+    def describe_agents() -> Dict[str, Any]:
+        """Return the 8 high-level agents used by the PickObject project."""
+        return {
+            "agent_count": len(get_agent_specs()),
+            "agents": get_agent_specs(),
+        }
+
+    @mcp.tool()
+    def find_responsible_agents(
+        failure_type: Optional[str] = None,
+        condition_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Find which high-level agent(s) handle a failure type or condition ID."""
+        if not failure_type and not condition_id:
+            raise ValueError("Provide failure_type or condition_id.")
+
+        matches: list[dict[str, object]] = []
+        if failure_type:
+            matches.extend(find_agents_for_failure(failure_type))
+        if condition_id:
+            condition_matches = find_agents_for_condition(condition_id)
+            for match in condition_matches:
+                if match not in matches:
+                    matches.append(match)
+
+        return {
+            "failure_type": failure_type,
+            "condition_id": condition_id,
+            "agents": matches,
+        }
 
     @mcp.tool()
     def reset_state() -> Dict[str, Any]:
@@ -97,7 +130,8 @@ def build_mcp_server() -> Any:
 
         For each condition you get: its stable ``condition_id``, the question
         used to evaluate it, the failure type triggered when it returns False,
-        and every (action, phase) pair where it appears.  Use this to know
+        the responsible high-level agent and low-level detector when defined,
+        and every (action, phase) pair where it appears. Use this to know
         exactly which IDs to pass to ``set_condition`` or ``set_conditions``.
         """
         from .actions import (
@@ -123,6 +157,11 @@ def build_mcp_server() -> Any:
                             "condition_id": cid,
                             "question": spec.question,
                             "failure_type_if_false": spec.failure_type,
+                            "agent_name": spec.agent_name,
+                            "detector_name": spec.detector_name,
+                            "agent_name_valid": spec.has_valid_agent(),
+                            "detector_name_valid": spec.has_valid_detector(),
+                            "will_be_checked": spec.should_check(),
                             "used_in": [],
                         }
                     conditions[cid]["used_in"].append(

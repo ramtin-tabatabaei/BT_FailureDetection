@@ -11,6 +11,8 @@ class LiftObject(TimedInterruptibleAction):
             condition_id="ObjectInGripper",
             question="Before lifting, is the object currently held in the gripper?",
             failure_type="grip_loss",
+            agent_name="InstantStateMonitorAgent",
+            detector_name="GripLossDetector",
         ),
     )
     hold_conditions = (
@@ -18,6 +20,8 @@ class LiftObject(TimedInterruptibleAction):
             condition_id="ObjectInGripper",
             question="While lifting, is the object still held in the gripper?",
             failure_type="grip_loss",
+            agent_name="InstantStateMonitorAgent",
+            detector_name="GripLossDetector",
         ),
     )
     postconditions = (
@@ -25,6 +29,8 @@ class LiftObject(TimedInterruptibleAction):
             condition_id="FinalObjectInGripperCheck",
             question="After lifting, is the object still held securely in the gripper?",
             failure_type="grip_loss",
+            agent_name="InstantStateMonitorAgent",
+            detector_name="GripLossDetector",
         ),
     )
 

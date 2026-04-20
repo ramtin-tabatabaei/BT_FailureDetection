@@ -11,11 +11,15 @@ class MoveToGrasp(TimedInterruptibleAction):
             condition_id="PreGraspPoseConfirmed",
             question="Before moving to grasp, is the robot correctly at the pre-grasp pose?",
             failure_type="execution_mismatch",
+            agent_name="ExecutionVerificationAgent",
+            detector_name="ExecutionMismatchDetector",
         ),
         failure_check(
             condition_id="GripperReadyBeforeGrasp",
             question="Before moving to grasp, is the gripper open and ready?",
             failure_type="execution_mismatch",
+            agent_name="ExecutionVerificationAgent",
+            detector_name="ExecutionMismatchDetector",
         ),
     )
     hold_conditions = (
@@ -23,6 +27,8 @@ class MoveToGrasp(TimedInterruptibleAction):
             condition_id="GripperReadyBeforeGrasp",
             question="While moving to grasp, is the gripper still open and ready?",
             failure_type="execution_mismatch",
+            agent_name="ExecutionVerificationAgent",
+            detector_name="ExecutionMismatchDetector",
         ),
     )
     postconditions = ()

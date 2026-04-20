@@ -1,17 +1,23 @@
-# PickObject BT
+# PickObject Package
 
-This repository contains a small behavior tree (BT) package for a `PickObject` task.
+`pickobject` is the full pick-side behaviour-tree package.
 
-It supports two ways of running:
+It contains:
 
-- `manual / human mode`: a human answers `y/n` condition questions in the terminal
-- `MCP / scripted mode`: an external agent or script drives the BT through MCP tools
+- the pick controller
+- the pick BT
+- action nodes and condition definitions
+- failure configuration
+- detector relays
+- task-specific agent wrappers
+- an interactive terminal mode
+- a pick-only MCP server
 
-The code does not directly connect to a robot. It is a BT engine plus failure/recovery logic.
+This is the most complete package in the repository and is the best reference when adding new conditions, failures, agents, or detectors.
 
-## Main Idea
+## What the Pick BT Does
 
-The BT runs a fixed sequence of actions:
+The pick sequence is defined in `pickobject/tree.py`:
 
 1. `ComputeGraspPose`
 2. `MoveToPreGrasp`
@@ -19,362 +25,346 @@ The BT runs a fixed sequence of actions:
 4. `CloseGripper`
 5. `LiftObject`
 
-Each action can have:
+When `LiftObject.on_conditions_satisfied()` runs, it sets `pick_succeeded = True`.
 
-- `preconditions`
-- `postconditions`
-- `runtime failure hotkeys` during timed actions
+## Core File Map
 
-`hold_conditions` exist for scripted/MCP mode, but manual mode does not ask hold-phase questions while an action is running.
+### Package entry and public API
 
-If a condition fails, the BT maps that failed check to a failure type such as:
+- `pickobject/__init__.py`: exports `build_mcp_server` and `main`.
+- `pickobject/__main__.py`: allows `python -m pickobject`.
+- `pickobject/main.py`: interactive CLI plus pick-only MCP server.
 
-- `object_not_found`
-- `execution_mismatch`
-- `grip_loss`
+### Configuration and metadata
 
-Then the system looks up the configured recovery options for that failure and asks the user or external agent to choose one.
+- `pickobject/config.py`: central pick configuration.
+  - loads `PickObject_failures_fixed.json`
+  - loads `PickObject_scene.json`
+  - defines `CAMERA_IMAGE_MAP`
+  - defines `TARGET_OBJECT`
+  - defines `PLACE_TARGET`
+  - defines `ACTIVE_AGENTS`
+  - defines `ACTIVE_DETECTORS`
+- `pickobject/failures.py`: runtime failure flags and hotkey mapping.
+- `pickobject/configs/PickObject_failures_fixed.json`: retry budgets and allowed recoveries per failure.
+- `pickobject/configs/PickObject_scene.json`: scene metadata and diagnosis prompt metadata.
 
-## Repository Layout
+### Controller and BT
 
-- [main.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/main.py): entry points for manual mode and MCP mode
-- [controller.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/controller.py): BT state, ticking, failure handling, recovery selection
-- [tree.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/tree.py): action sequence definition
-- [actions/](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/actions): action nodes and condition checks
-- [agents/](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/agents): failure agents used in scripted/MCP mode
-- [failures.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/failures.py): failure registry and runtime/hotkey rules
-- [configs/PickObject_failures_fixed.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_failures_fixed.json): failure definitions, retry budgets, recoveries
-- [configs/PickObject_scene.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_scene.json): scene and diagnosis prompt config
-- [providers.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/providers.py): terminal and scripted providers
+- `pickobject/controller.py`: the main state machine for the pick BT.
+  - stores world state
+  - ticks the tree
+  - logs checked conditions
+  - records failures
+  - manages recovery and resume step selection
+  - provides `create_scripted_controller()` and `create_interactive_controller()`
+- `pickobject/tree.py`: builds the pick sequence from `PICK_SEQUENCE`.
+- `pickobject/providers.py`: terminal/scripted condition providers and action monitor classes.
 
-## Install Notes
+### Failure handling
 
-At minimum, manual mode needs `py_trees`.
+- `pickobject/failure_manager.py`: owns detector instances and returns the first active failure signal.
+- `pickobject/experiment.py`: failure selector, enabled by default for every configured failure.
+- `pickobject/detectors/base.py`: shared base class for pick detectors.
+- `pickobject/detectors/__init__.py`: detector registry.
 
-MCP mode also needs the `mcp` package because [main.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/main.py) imports `FastMCP`.
+### Action definitions
 
-## Run Manual Mode
+- `pickobject/actions/base.py`: `ConditionSpec`, `failure_check`, `InstantAction`, `TimedInterruptibleAction`.
+- `pickobject/actions/compute_grasp_pose.py`
+- `pickobject/actions/move_to_pregrasp.py`
+- `pickobject/actions/move_to_grasp.py`
+- `pickobject/actions/close_gripper.py`
+- `pickobject/actions/lift_object.py`
+- `pickobject/actions/open_gripper.py`
+- `pickobject/actions/__init__.py`
 
-Run from the parent directory of the package:
+### Agent wrappers
+
+- `pickobject/agents/base.py`: metadata base class for pick wrappers.
+- `pickobject/agents/__init__.py`: registry of pick agent wrappers.
+- `pickobject/agents/pick_scene_perception_agent.py`
+- `pickobject/agents/pick_grasp_verification_agent.py`
+- `pickobject/agents/pick_pose_verification_agent.py`
+- `pickobject/agents/pick_execution_verification_agent.py`
+- `pickobject/agents/pick_temporal_monitor_agent.py`
+- `pickobject/agents/pick_instant_state_monitor_agent.py`
+- `pickobject/agents/pick_task_execution_agent.py`
+- `pickobject/agents/pick_recovery_agent.py`
+
+## How the Pick Files Connect
+
+The main connection path is:
+
+1. `pickobject/tree.py` builds the action sequence.
+2. Each action file declares `preconditions`, `hold_conditions`, and `postconditions`.
+3. Each condition is a `ConditionSpec` created by `failure_check(...)`.
+4. `ConditionSpec.should_check()` checks `ACTIVE_AGENTS` and `ACTIVE_DETECTORS` from `pickobject/config.py`.
+5. If the condition is active, `PickObjectController.check()` asks the active provider for a boolean result.
+6. If the condition fails, `PickObjectController.detect_failure()` asks `FailureDetectorManager` for a failure.
+7. Recovery options come from `pickobject/configs/PickObject_failures_fixed.json`.
+8. `apply_recovery_choice()` increments retry counts and resumes from the configured or current BT step.
+
+## Pick Actions and Their Conditions
+
+### `compute_grasp_pose.py`
+
+- action type: `InstantAction`
+- preconditions:
+  - `TargetVisible`
+  - failure type: `object_not_found`
+  - agent: `ScenePerceptionAgent`
+- purpose: do not compute a grasp unless the object is visible
+
+### `move_to_pregrasp.py`
+
+- action type: `TimedInterruptibleAction`
+- preconditions:
+  - `TargetVisible`
+  - failure type: `object_not_found`
+  - agent: `ScenePerceptionAgent`
+  - detector: `ObjectNotFoundDetector`
+  - `GripperReadyBeforeGrasp`
+  - failure type: `execution_mismatch`
+  - agent: `ExecutionVerificationAgent`
+  - detector: `ExecutionMismatchDetector`
+- hold conditions:
+  - `GripperReadyBeforeGrasp`
+- postconditions:
+  - `GripperReadyBeforeGrasp`
+
+### `move_to_grasp.py`
+
+- action type: `TimedInterruptibleAction`
+- preconditions:
+  - `PreGraspPoseConfirmed`
+  - failure type: `execution_mismatch`
+  - agent: `ExecutionVerificationAgent`
+  - detector: `ExecutionMismatchDetector`
+  - `GripperReadyBeforeGrasp`
+  - failure type: `execution_mismatch`
+  - agent: `ExecutionVerificationAgent`
+  - detector: `ExecutionMismatchDetector`
+- hold conditions:
+  - `GripperReadyBeforeGrasp`
+
+### `close_gripper.py`
+
+- action type: `TimedInterruptibleAction`
+- preconditions:
+  - `GripperReady`
+  - failure type: `execution_mismatch`
+  - agent: `ExecutionVerificationAgent`
+  - detector: `ExecutionMismatchDetector`
+  - `CorrectObjectSelected`
+  - failure type: `wrong_object_selection`
+  - agent: `GraspVerificationAgent`
+  - detector: `WrongObjectSelectionDetector`
+  - `GraspPositionAligned`
+  - failure type: `wrong_position`
+  - agent: `PoseVerificationAgent`
+  - detector: `WrongPositionDetector`
+  - `GraspOrientationAligned`
+  - failure type: `wrong_orientation`
+  - agent: `PoseVerificationAgent`
+  - detector: `WrongOrientationDetector`
+- postconditions:
+  - `ObjectInGripper`
+  - failure type: `grip_loss`
+  - agent: `InstantStateMonitorAgent`
+  - detector: `GripLossDetector`
+
+### `lift_object.py`
+
+- action type: `TimedInterruptibleAction`
+- preconditions:
+  - `ObjectInGripper`
+  - failure type: `grip_loss`
+  - agent: `InstantStateMonitorAgent`
+  - detector: `GripLossDetector`
+- hold conditions:
+  - `ObjectInGripper`
+- postconditions:
+  - `FinalObjectInGripperCheck`
+  - failure type: `grip_loss`
+  - agent: `InstantStateMonitorAgent`
+  - detector: `GripLossDetector`
+- success hook:
+  - sets `pick_succeeded = True`
+
+### `open_gripper.py`
+
+- scaffold action
+- defined but not currently used by `PICK_SEQUENCE`
+
+## Pick Agents
+
+Pick agent wrappers live in `pickobject/agents/` and only add task-specific metadata plus light wrapper logic.
+
+- `pick_scene_perception_agent.py`
+  - name: `ScenePerceptionAgent`
+  - owns `TargetVisible`
+  - detects `object_not_found`
+- `pick_grasp_verification_agent.py`
+  - name: `GraspVerificationAgent`
+  - owns `CorrectObjectSelected`
+  - detects `wrong_object_selection`
+- `pick_pose_verification_agent.py`
+  - name: `PoseVerificationAgent`
+  - owns `PreGraspPoseConfirmed`, `GraspPositionAligned`, `GraspOrientationAligned`
+  - detects `wrong_position`, `wrong_orientation`, `execution_mismatch`
+- `pick_execution_verification_agent.py`
+  - name: `ExecutionVerificationAgent`
+  - owns transition-level checks such as `GripperReady`, `GripperReadyBeforeGrasp`, `PreGraspPoseConfirmed`
+  - detects `execution_mismatch`
+- `pick_temporal_monitor_agent.py`
+  - name: `TemporalMonitorAgent`
+  - detects `freezing`, `action_timeout`
+- `pick_instant_state_monitor_agent.py`
+  - name: `InstantStateMonitorAgent`
+  - owns grip/contact checks
+  - detects `grip_loss`, `collision`, `force_limit_exceeded`, `execution_mismatch`
+- `pick_task_execution_agent.py`
+  - metadata wrapper for task execution role
+- `pick_recovery_agent.py`
+  - metadata wrapper for recovery role
+
+## Pick Detectors
+
+Each file in `pickobject/detectors/` is a small relay that reads `state["agent_inputs"][failure_type]`.
+
+- `object_not_found_detector.py`: relays `object_not_found`
+- `wrong_object_selection_detector.py`: relays `wrong_object_selection`
+- `wrong_position_detector.py`: relays `wrong_position`
+- `wrong_orientation_detector.py`: relays `wrong_orientation`
+- `execution_mismatch_detector.py`: relays `execution_mismatch`
+- `freezing_detector.py`: relays `freezing`
+- `action_timeout_detector.py`: relays `action_timeout`
+- `grip_loss_detector.py`: relays `grip_loss`
+- `collision_detector.py`: relays `collision`
+- `force_limit_exceeded_detector.py`: relays `force_limit_exceeded`
+
+`pickobject/detectors/__init__.py` is the registry that maps each `failure_type` to its detector class.
+
+## How To Turn Pick Agents On or Off
+
+Edit `pickobject/config.py`.
+
+Example:
+
+```python
+ACTIVE_AGENTS = {
+    "ScenePerceptionAgent",
+    "GraspVerificationAgent",
+    "PoseVerificationAgent",
+}
+```
+
+If an action condition names `ExecutionVerificationAgent`, but that name is not in `ACTIVE_AGENTS`, the condition is skipped unless its detector is still active.
+
+## How To Turn Pick Detectors On or Off
+
+Edit `pickobject/config.py`.
+
+Example:
+
+```python
+ACTIVE_DETECTORS = {
+    "ObjectNotFoundDetector",
+    "WrongPositionDetector",
+    "GripLossDetector",
+}
+```
+
+If a condition's detector is not in `ACTIVE_DETECTORS`, it does not help activate that condition.
+
+Important distinction:
+
+- `ACTIVE_DETECTORS` gates condition execution.
+- `ExperimentFailureSelector` in `pickobject/experiment.py` gates whether a failure type is globally enabled for the detector manager.
+
+## How To Add a New Pick Failure
+
+### Condition failure
+
+1. Add it to `pickobject/configs/PickObject_failures_fixed.json`.
+2. Add a `failure_check(...)` entry in the appropriate action.
+3. If needed, add `agent_name` and `detector_name`.
+
+### Runtime or injected failure
+
+1. Add it to `pickobject/configs/PickObject_failures_fixed.json`.
+2. Add it to `pickobject/failures.py` if it should be a runtime-polled or hotkey-mapped failure.
+3. Add a detector file in `pickobject/detectors/`.
+4. Register the detector in `pickobject/detectors/__init__.py`.
+5. Inject the signal through `controller.set_agent_input(...)` or the MCP tool.
+
+## How To Add a New Pick Agent
+
+1. Create or update the shared implementation in `agents/`.
+2. Add a wrapper in `pickobject/agents/`.
+3. Register it in `pickobject/agents/__init__.py`.
+4. Reference it by `agent_name` from an action condition.
+5. Add its name to `ACTIVE_AGENTS`.
+
+## How To Add a New Pick Detector
+
+1. Create a new detector in `pickobject/detectors/`.
+2. Subclass `FailureDetector`.
+3. Set `failure_type`.
+4. Register it in `pickobject/detectors/__init__.py`.
+5. Add the detector name to `ACTIVE_DETECTORS`.
+
+## Running PickObject
+
+### Interactive terminal mode
 
 ```bash
-cd "/Users/stabatabaeim/Univerisity/Year 3/BT Study/Codes"
 python3 -m pickobject
 ```
 
-Manual mode behavior:
+This uses:
 
-- `preconditions`: ask the human `y/n`
-- `postconditions`: ask the human `y/n`
-- timed actions: show hotkeys for runtime failures
-- repeated identical `pre` and `post` checks in the same tick are reused
-- `hold_conditions` are skipped in manual mode
+- `TerminalConditionProvider`
+- `TerminalChoiceProvider`
+- `InteractiveActionMonitor`
 
-Useful environment variables:
+### Pick-only MCP mode
 
 ```bash
-BT_ACTION_DURATION_SECONDS=5
-BT_TICK_PERIOD_SECONDS=2
-BT_MAX_TICKS=100
-```
-
-Example:
-
-```bash
-BT_ACTION_DURATION_SECONDS=0 BT_TICK_PERIOD_SECONDS=0 python3 -m pickobject
-```
-
-## Run MCP Mode
-
-Run:
-
-```bash
-cd "/Users/stabatabaeim/Univerisity/Year 3/BT Study/Codes"
 python3 -m pickobject --mcp
 ```
 
-In MCP mode, the package uses the scripted controller, not the terminal one.
-
-Important:
-
-- the BT does not inspect the world by itself
-- an external agent must set condition answers and choose recoveries through MCP tools
-
-Typical MCP flow:
-
-1. `reset_state()`
-2. `get_condition_ids()`
-3. external agent decides what is true
-4. `set_condition(...)` or `set_conditions(...)`
-5. `tick_once()`
-6. if there is a failure, call `get_recovery_options()`
-7. choose one recovery
-8. `apply_recovery_choice(...)`
-9. `tick_once()` again
-
-## Manual Mode vs MCP Mode
-
-### Manual / Human Mode
-
-- Uses `TerminalConditionProvider`
-- Uses `TerminalChoiceProvider`
-- Human answers questions in the terminal
-- During timed actions, failures are injected with hotkeys
-
-### MCP / Scripted Mode
-
-- Uses `ScriptedConditionProvider`
-- Uses `ScriptedChoiceProvider`
-- External agent/script sets condition results
-- External agent/script chooses recoveries
-- Failure agents can be triggered with `set_failure_agent_input(...)`
-
-## Failure and Recovery Model
-
-Failures are defined in [configs/PickObject_failures_fixed.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_failures_fixed.json).
-
-Each failure has:
-
-- `retry_budget`
-- `recoveries`
-
-Example:
-
-```json
-"grip_loss": {
-  "retry_budget": 2,
-  "recoveries": [
-    "stop_motion_immediately",
-    "search_for_dropped_object",
-    "re_approach_and_regrasp",
-    "return_to_pre_transport_state",
-    "ask_user"
-  ]
-}
-```
-
-When a failure happens:
-
-1. the BT stores `last_failure`
-2. the recovery options are read from config
-3. one recovery is chosen
-4. retry count is incremented
-5. the tree resumes from the failed step by default
-
-If the retry budget is exhausted, the run stops.
-
-## Recovery Resume Behavior
-
-By default, after a recovery is chosen, the BT resumes from the failed step.
-
-If you want a specific recovery to jump to a different step, define metadata in the optional top-level `recoveries` section of [configs/PickObject_failures_fixed.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_failures_fixed.json).
-
-Example:
-
-```json
-{
-  "PickObject": {
-    "failures": {
-      "execution_mismatch": {
-        "retry_budget": 2,
-        "recoveries": [
-          "replace_with_valid_action",
-          "reorder_actions"
-        ]
-      }
-    },
-    "recoveries": {
-      "replace_with_valid_action": {
-        "restart_step": "MoveToPreGrasp"
-      },
-      "reorder_actions": {
-        "restart_step": "ComputeGraspPose"
-      }
-    }
-  }
-}
-```
-
-Supported keys:
-
-- `restart_step`
-- `resume_step`
-
-If no step is configured, the controller resumes from the failure step.
-
-## How To Add a New Failure
-
-There are two common cases.
-
-### Case 1: Condition-Based Failure
-
-Use this when a failure is simply the result of a condition returning `False`.
-
-Steps:
-
-1. Add the failure to [configs/PickObject_failures_fixed.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_failures_fixed.json)
-2. Reference it from an action condition with `failure_check(...)`
-
-Example config:
-
-```json
-"slippage": {
-  "retry_budget": 2,
-  "recoveries": [
-    "stop_motion_immediately",
-    "regrasp",
-    "ask_user"
-  ]
-}
-```
-
-Example action usage:
-
-```python
-failure_check(
-    condition_id="ObjectStable",
-    question="Is the object stable in the gripper?",
-    failure_type="slippage",
-)
-```
-
-This is enough for manual mode and scripted condition failures.
-
-### Case 2: Runtime / Agent-Detected Failure
-
-Use this when the failure should be actively monitored or injected by an external agent.
-
-Steps:
-
-1. Add the failure to [configs/PickObject_failures_fixed.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_failures_fixed.json)
-2. Add it to [failures.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/failures.py)
-3. Create an agent file in [agents/](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/agents)
-4. Register the agent in [agents/__init__.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/agents/__init__.py)
-
-Example in `failures.py`:
-
-```python
-"slippage": {"monitor_during_actions": True, "hotkey": "s"}
-```
-
-Example agent:
-
-```python
-from .base import FailureAgent, FailureSignal
-
-class SlippageAgent(FailureAgent):
-    failure_type = "slippage"
-
-    def evaluate(self, state):
-        if not self._is_triggered(state):
-            return None
-        return FailureSignal(self.failure_type, detected=True, details=self._input(state))
-```
-
-Then register it in [agents/__init__.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/agents/__init__.py).
-
-## How To Add a Recovery
-
-If you only need a named recovery option:
-
-1. Add the recovery name inside the failure’s `recoveries` list in [configs/PickObject_failures_fixed.json](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/configs/PickObject_failures_fixed.json)
-
-Example:
-
-```json
-"execution_mismatch": {
-  "retry_budget": 2,
-  "recoveries": [
-    "replace_with_valid_action",
-    "reorder_actions",
-    "re_evaluate_current_state"
-  ]
-}
-```
-
-If you also want recovery metadata such as where to resume:
-
-1. Add a top-level `recoveries` section
-2. Add an entry for that recovery name
-
-Example:
-
-```json
-"recoveries": {
-  "re_evaluate_current_state": {
-    "restart_step": "MoveToPreGrasp"
-  }
-}
-```
-
-At the moment, recoveries are names plus optional resume metadata. They are not separate executable BT actions yet.
-
-## How Conditions Work
-
-A condition is defined by:
-
-- `condition_id`: stable key for the check
-- `question`: human-readable prompt
-- `failure_type`: what failure to report if the answer is `False`
-
-Example:
-
-```python
-failure_check(
-    condition_id="TargetVisible",
-    question="Can the robot currently see the target object?",
-    failure_type="object_not_found",
-)
-```
-
-`condition_id` is important because:
-
-- manual mode shows it in the terminal
-- MCP mode uses it as the key for `set_condition(...)`
-- tick logs record it
-
-## How Runtime Failures Work
-
-Timed actions show hotkeys such as:
-
-- `x=exec_mismatch`
-- `f=freezing`
-- `g=grip_loss`
-- `c=collision`
-- `l=force_limit`
-- `t=action_timeout`
-
-Those mappings come from [failures.py](/Users/stabatabaeim/Univerisity/Year%203/BT%20Study/Codes/pickobject/failures.py).
-
-In manual mode, press those keys during a timed action to inject a runtime failure.
-
-## Notes About Hold Conditions
-
-The project currently treats hold monitoring through runtime hotkeys or scripted failure input.
-
-In the current action files:
-
-- `hold_conditions` can be defined in the action code
-- manual mode skips hold questions during motion
-- scripted/MCP mode can still evaluate hold conditions
-
-If you want to reintroduce `hold_conditions` later for scripted/MCP mode, you can, but keep the interaction model clear:
-
-- human mode: avoid blocking prompts during motion
-- scripted mode: external agent can update conditions or inject failures while the action is running
-
-## Recommended Workflow For Changes
-
-When adding or changing task logic:
-
-1. update the failure config
-2. update the action condition mapping
-3. update `failures.py` if runtime monitoring is needed
-4. add/register an agent if scripted runtime detection is needed
-5. test in manual mode with `python3 -m pickobject`
-
-## Current Limitations
-
-- recoveries are selected and recorded, but most do not execute different robot-specific behavior yet
-- the package does not directly connect to sensors, planners, or hardware
-- MCP mode depends on an external agent to provide observations and choices
+This uses:
+
+- `ScriptedConditionProvider`
+- `ScriptedChoiceProvider`
+- `NullActionMonitor`
+
+## Useful Pick MCP Tools
+
+`pickobject/main.py` exposes:
+
+- `describe_tree`
+- `describe_agents`
+- `find_responsible_agents`
+- `reset_state`
+- `set_condition`
+- `set_conditions`
+- `set_choice`
+- `set_failure_agent_input`
+- `get_enabled_failures`
+- `get_recovery_options`
+- `apply_recovery_choice`
+- `tick_once`
+- `get_state`
+- `get_condition_ids`
+- `record_recovery_decision`
+- `get_tick_history`
+
+## Key Implementation Notes
+
+- pick is the reference implementation for this repository.
+- hold conditions are supported in pick because `TimedInterruptibleAction.update()` reevaluates them during timed execution.
+- pick runtime failures are also polled during timed execution.
+- recovery resumption can jump to a configured step using `restart_step` or `resume_step` in the JSON config.

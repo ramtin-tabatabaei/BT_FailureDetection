@@ -10,6 +10,8 @@ from ..config import ACTION_DURATION_SECONDS, ACTION_HOTKEY_HINT
 from ..failures import RUNTIME_FAILURE_TYPES
 
 
+
+
 class PickAction(py_trees.behaviour.Behaviour):
     def __init__(self, name: str, controller: Any):
         super().__init__(name)
@@ -22,6 +24,22 @@ class ConditionSpec:
     condition_id: str
     question: str
     failure_type: str
+    agent_name: str | None = None
+    detector_name: str | None = None
+    # Which camera feed this condition should be evaluated against.
+    # Resolved to an actual image path via CAMERA_IMAGE_MAP in pickobject/config.py.
+    image_source: str = "scene_camera"
+
+    def has_valid_agent(self) -> bool:
+        from ..config import ACTIVE_AGENTS
+        return bool(self.agent_name) and self.agent_name in ACTIVE_AGENTS
+
+    def has_valid_detector(self) -> bool:
+        from ..config import ACTIVE_DETECTORS
+        return bool(self.detector_name) and self.detector_name in ACTIVE_DETECTORS
+
+    def should_check(self) -> bool:
+        return self.has_valid_agent() or self.has_valid_detector()
 
 
 def failure_check(
@@ -29,11 +47,17 @@ def failure_check(
     condition_id: str,
     question: str,
     failure_type: str,
+    agent_name: str | None = None,
+    detector_name: str | None = None,
+    image_source: str = "scene_camera",
 ) -> ConditionSpec:
     return ConditionSpec(
         condition_id=condition_id,
         question=question,
         failure_type=failure_type,
+        agent_name=agent_name,
+        detector_name=detector_name,
+        image_source=image_source,
     )
 
 
@@ -46,7 +70,23 @@ class ActionWithConditions(PickAction):
     def _run_conditions(self, phase: str, conditions: tuple[ConditionSpec, ...]) -> py_trees.common.Status:
         for condition in conditions:
             self.controller.set_current_step(self.name)
-            self.controller.set_current_condition(condition.condition_id, phase, condition.question)
+            if not condition.should_check():
+                self.controller.record_condition_skipped(
+                    condition.condition_id,
+                    phase,
+                    question=condition.question,
+                    agent_name=condition.agent_name,
+                    detector_name=condition.detector_name,
+                    reason="Condition has no valid agent_name or detector_name.",
+                )
+                continue
+            self.controller.set_current_condition(
+                condition.condition_id,
+                phase,
+                condition.question,
+                agent_name=condition.agent_name,
+                detector_name=condition.detector_name,
+            )
             result = self.controller.check(condition.condition_id, condition.question)
 
             if result:
@@ -87,7 +127,7 @@ class TimedInterruptibleAction(ActionWithConditions):
         self.controller.set_current_step(self.step_name)
         if hasattr(self.controller.action_monitor, "open"):
             self.controller.action_monitor.open()
-        print(f"[Action] {self.action_text} ({ACTION_DURATION_SECONDS:.1f}s, press {ACTION_HOTKEY_HINT})")
+        print(f"\n[Action] {self.action_text}", end="", flush=True)
 
     def update(self) -> py_trees.common.Status:
         if not self.action_started:
@@ -115,7 +155,9 @@ class TimedInterruptibleAction(ActionWithConditions):
         if self.start_time is None:
             self.start_time = time.monotonic()
 
-        if time.monotonic() - self.start_time >= ACTION_DURATION_SECONDS:
+        elapsed = time.monotonic() - self.start_time
+        if elapsed >= ACTION_DURATION_SECONDS:
+            print(f"\r[Action] {self.action_text}  {'—' * 20}> done", flush=True)
             self._close_monitor()
             status = self._run_conditions("post", self.postconditions)
             if status != py_trees.common.Status.SUCCESS:
@@ -124,6 +166,11 @@ class TimedInterruptibleAction(ActionWithConditions):
             self.on_conditions_satisfied()
             return py_trees.common.Status.SUCCESS
 
+        # Animate: arrow grows as time passes
+        fraction = elapsed / ACTION_DURATION_SECONDS if ACTION_DURATION_SECONDS > 0 else 1.0
+        dashes = int(fraction * 18)
+        arrow = "-" * dashes + "->"
+        print(f"\r[Action] {self.action_text}  {arrow:<21}", end="", flush=True)
         return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status: py_trees.common.Status) -> None:

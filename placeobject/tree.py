@@ -4,7 +4,9 @@ import py_trees
 
 from .actions import LowerObject, MoveToPlace, ReleaseObject
 
-PLACE_SEQUENCE = ["MoveToPlace", "LowerObject", "ReleaseObject"]
+PLACE_SEQUENCE = ["MoveToPlace", 
+                  "LowerObject", 
+                  "ReleaseObject"]
 
 
 def make_place_object_tree(controller) -> py_trees.behaviour.Behaviour:

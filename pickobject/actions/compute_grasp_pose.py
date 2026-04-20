@@ -9,6 +9,9 @@ class ComputeGraspPose(InstantAction):
             condition_id="TargetVisible",
             question="Can the robot currently see the target object?",
             failure_type="object_not_found",
+            agent_name="ScenePerceptionAgent",
+            detector_name="",
+            image_source="scene_camera",
         ),
     )
 

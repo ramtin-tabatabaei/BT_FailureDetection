@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 import py_trees
 
@@ -38,6 +38,8 @@ def build_initial_world_state() -> Dict[str, Any]:
         "current_condition_name": None,
         "current_condition_phase": None,
         "current_condition_question": None,
+        "current_condition_agent": None,
+        "current_condition_detector": None,
         "last_valid_bt_step": "Idle",
         "last_recovery_options": [],
         "last_recovery_budget": None,
@@ -101,21 +103,70 @@ class PickObjectController:
         condition_name: Optional[str],
         phase: Optional[str],
         question: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        detector_name: Optional[str] = None,
     ) -> None:
         self.state["current_condition_name"] = condition_name
         self.state["current_condition_phase"] = phase
         self.state["current_condition_question"] = question
+        self.state["current_condition_agent"] = agent_name
+        self.state["current_condition_detector"] = detector_name
+
+    # Maps condition_id → world_state key so check() keeps the state up to date.
+    _CONDITION_STATE_MAP: ClassVar[Dict[str, str]] = {
+        "TargetVisible":              "target_visible",
+        "CorrectObjectSelected":      "correct_object",
+        "GripperReady":               "gripper_ready",
+        "GripperReadyBeforeGrasp":    "gripper_ready",
+        "GraspPositionAligned":       "grasp_pose_valid",
+        "GraspOrientationAligned":    "grasp_pose_valid",
+        "PreGraspPoseConfirmed":      "grasp_pose_valid",
+        "ObjectInGripper":            "object_in_gripper",
+        "FinalObjectInGripperCheck":  "object_in_gripper",
+    }
 
     def check(self, check_name: str, description: str) -> bool:
         result = self.condition_provider.check(check_name, description, self.state)
+
+        # Write result back into world_state so it reflects what the BT observed.
+        state_key = self._CONDITION_STATE_MAP.get(check_name)
+        if state_key is not None:
+            self.state[state_key] = result
+
         if self._current_tick_log is not None:
             self._current_tick_log["conditions_checked"].append({
                 "condition_id": check_name,
                 "result": result,
                 "phase": self.state.get("current_condition_phase"),
                 "bt_step": self.state.get("current_bt_step"),
+                "agent_name": self.state.get("current_condition_agent"),
+                "detector_name": self.state.get("current_condition_detector"),
             })
         return result
+
+    def record_condition_skipped(
+        self,
+        check_name: str,
+        phase: str,
+        *,
+        question: str,
+        agent_name: Optional[str],
+        detector_name: Optional[str],
+        reason: str,
+    ) -> None:
+        if self._current_tick_log is None:
+            return
+        self._current_tick_log["conditions_checked"].append({
+            "condition_id": check_name,
+            "result": None,
+            "phase": phase,
+            "bt_step": self.state.get("current_bt_step"),
+            "question": question,
+            "agent_name": agent_name,
+            "detector_name": detector_name,
+            "skipped": True,
+            "skip_reason": reason,
+        })
 
     def should_evaluate_hold_conditions(self) -> bool:
         return bool(getattr(self.condition_provider, "evaluate_hold_conditions", True))
